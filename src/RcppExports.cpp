@@ -27,22 +27,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_Xty_cpp
-NumericVector compute_Xty_cpp(const NumericMatrix& X, const NumericVector& y);
-RcppExport SEXP _susieR_compute_Xty_cpp(SEXP XSEXP, SEXP ySEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type y(ySEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_Xty_cpp(X, y));
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_susieR_single_effect_regression_cpp", (DL_FUNC) &_susieR_single_effect_regression_cpp, 7},
-    {"_susieR_compute_Xty_cpp", (DL_FUNC) &_susieR_compute_Xty_cpp, 2},
     {NULL, NULL, 0}
 };
 

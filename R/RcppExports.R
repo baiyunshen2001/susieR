@@ -5,7 +5,3 @@ single_effect_regression_cpp <- function(y, X, V, residual_variance = 1, prior_w
     .Call('_susieR_single_effect_regression_cpp', PACKAGE = 'susieR', y, X, V, residual_variance, prior_weights, optimize_V, check_null_threshold)
 }
 
-compute_Xty_cpp <- function(X, y) {
-    .Call('_susieR_compute_Xty_cpp', PACKAGE = 'susieR', X, y)
-}
-
