@@ -1,0 +1,8 @@
+**/.Rhistory
+**/.DS_Store
+**/.Rapp.history
+*.Rproj
+.Rproj.user
+.RData
+.Ruserdata
+Rplots.pdf
