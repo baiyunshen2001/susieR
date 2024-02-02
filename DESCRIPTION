@@ -39,7 +39,8 @@ Imports:
     reshape,
     crayon,
     ggplot2,
-    Rcpp
+    Rcpp,
+    RcppArmadillo
 Suggests:
     curl,
     testthat,
@@ -55,4 +56,5 @@ NeedsCompilation: no
 RoxygenNote: 7.2.3
 VignetteBuilder: knitr
 LinkingTo: 
-    Rcpp
+    Rcpp,
+    RcppArmadillo

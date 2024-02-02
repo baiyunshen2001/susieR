@@ -1,9 +1,23 @@
-#include <Rcpp.h>
-using namespace Rcpp;
-using namespace arma;
 
-// Assuming compute_Xty and optimize_prior_variance are defined elsewhere
+#include <RcppArmadillo.h>
+#include <iostream>
+#include <stdexcept>
+#ifdef _OPENMP
+# include <omp.h>
+#endif
 
+
+
+using Rcpp::List;
+using Rcpp::Named;
+using Rcpp::NumericVector;
+using Rcpp::IntegerVector;
+
+using arma::vectorise;
+
+// [[Rcpp::plugins(openmp)]]
+// [[Rcpp::plugins(cpp11)]]
+// [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::export]]
 List single_effect_regression_cpp(NumericVector y, NumericMatrix X, double V, 
                                   double residual_variance = 1, Nullable<NumericVector> prior_weights = R_NilValue,
@@ -30,8 +44,8 @@ List single_effect_regression_cpp(NumericVector y, NumericMatrix X, double V,
 
   NumericVector lbf(betahat.size());
   for (int i = 0; i < betahat.size(); ++i) {
-    NumericVector lbf1 = dnorm(betahat[i], 0.0, sqrt(V + shat2[i]), true);
-    NumericVector lbf2 = dnorm(betahat[i], 0.0, sqrt(shat2[i]), true);
+    NumericVector lbf1 = dnorm(betahat[i], 0.0, sqrt(V + shat2), true);
+    NumericVector lbf2 = dnorm(betahat[i], 0.0, sqrt(shat2), true);
     lbf[i] = lbf1[0] - lbf2[0];
   };
 
@@ -60,7 +74,7 @@ List single_effect_regression_cpp(NumericVector y, NumericMatrix X, double V,
 }
 
 
-
+// [[Rcpp::depends(RcppArmadillo)]]
 NumericVector compute_Xty_cpp(const NumericMatrix& X, const NumericVector& y) {
   // Get attributes
   NumericVector cm = X.attr("scaled:center");
@@ -100,12 +114,33 @@ NumericVector compute_tf_Xty_cpp(int order, const NumericVector& y) {
 }
 
 
+double est_V_uniroot_cpp(NumericVector betahat, double shat2, NumericVector prior_weights) {
+  // Define the R function 'uniroot'
+  Function uniroot("uniroot");
+  
+  // Define the negloglik.grad.logscale function
+  // Make sure this function is defined in R and available in the environment
+  Function negloglik_grad_logscale("negloglik.grad.logscale");
+  
+  // Call the R 'uniroot' function
+  // Note: 'negloglik_grad_logscale' is passed as an internal function
+  List V_u = uniroot(Rcpp::_["f"] = negloglik_grad_logscale, 
+                     Rcpp::_["interval"] = NumericVector::create(-10, 10),
+                     Rcpp::_["extendInt"] = "upX",
+                     Rcpp::_["betahat"] = betahat, 
+                     Rcpp::_["shat2"] = shat2, 
+                     Rcpp::_["prior_weights"] = prior_weights);
+  
+  // Extract the root and exponentiate
+  double root = as<double>(V_u["root"]);
+  return exp(root);
+}
 
 
-double optimize_prior_variance_cpp(String optimize_V, NumericVector betahat, double shat2, 
-                                   NumericVector prior_weights, Nullable<NumericVector> alpha = R_NilValue, 
-                                   Nullable<NumericVector> post_mean2 = R_NilValue, 
-                                   Nullable<double> V_init = R_NilValue, double check_null_threshold = 0) {
+double optimize_prior_variance_cpp(std::string optimize_V, NumericVector betahat, double shat2, 
+                                   NumericVector prior_weights, Nullable<NumericVector> alpha, 
+                                   Nullable<NumericVector> post_mean2, 
+                                   Nullable<double> V_init, double check_null_threshold = 0){
   
   double V;
   if (V_init.isNotNull()) {
@@ -152,7 +187,7 @@ double optimize_prior_variance_cpp(String optimize_V, NumericVector betahat, dou
       }
       V = exp(lV);
     } else if (method == "uniroot") {
-      V = est_V_uniroot_cpp(betahat, shat2, prior_weights)
+      V = est_V_uniroot_cpp(betahat, shat2, prior_weights);
     } else if (method == "EM") {
       if (alpha.isNotNull() && post_mean2.isNotNull()) {
         NumericVector alpha_vec = as<NumericVector>(alpha);
@@ -169,25 +204,4 @@ double optimize_prior_variance_cpp(String optimize_V, NumericVector betahat, dou
 
 
 
-double est_V_uniroot_cpp(NumericVector betahat, double shat2, NumericVector prior_weights) {
-  // Define the R function 'uniroot'
-  Function uniroot("uniroot");
-  
-  // Define the negloglik.grad.logscale function
-  // Make sure this function is defined in R and available in the environment
-  Function negloglik_grad_logscale("negloglik.grad.logscale");
-  
-  // Call the R 'uniroot' function
-  // Note: 'negloglik_grad_logscale' is passed as an internal function
-  List V_u = uniroot(Rcpp::_["f"] = negloglik_grad_logscale, 
-                     Rcpp::_["interval"] = NumericVector::create(-10, 10),
-                     Rcpp::_["extendInt"] = "upX",
-                     Rcpp::_["betahat"] = betahat, 
-                     Rcpp::_["shat2"] = shat2, 
-                     Rcpp::_["prior_weights"] = prior_weights);
-  
-  // Extract the root and exponentiate
-  double root = as<double>(V_u["root"]);
-  return exp(root);
-}
 
