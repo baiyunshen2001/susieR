@@ -49,7 +49,7 @@ NumericVector compute_Xty_cpp(const NumericMatrix& X, const NumericVector& y) {
   if (!Rf_isNull(X.attr("matrix.type"))) {
     // Assuming compute_tf_Xty is defined
     int order = X.attr("order");
-    scaled_Xty = compute_tf_Xty_cpp(order, y) / as<arma::vec>(csd);
+    scaled_Xty = compute_tf_Xty_cpp(order, y) / csd;
   } else {
     scaled_Xty = ytX / as<arma::vec>(csd);
   }
@@ -114,7 +114,8 @@ double neg_loglik_logscale(NumericVector V, NumericVector betahat, double shat2,
 double optimize_prior_variance_cpp(std::string optimize_V, NumericVector betahat, double shat2, 
                                    NumericVector prior_weights, Nullable<NumericVector> alpha, 
                                    Nullable<NumericVector> post_mean2, 
-                                   Nullable<double> V_init, double check_null_threshold = 0){
+                                   Nullable<double> V_init, double check_null_threshold = 0 ){
+  
   
   double V;
   if (V_init.isNotNull()) {
@@ -123,7 +124,7 @@ double optimize_prior_variance_cpp(std::string optimize_V, NumericVector betahat
     V = 1.0; // Default value if V_init is NULL
   }
   
-  std::string method = as<std::string>(optimize_V);
+  std::string method = optimize_V;
   
   if (method != "simple") {
     if (method == "optim") {
@@ -150,14 +151,14 @@ double optimize_prior_variance_cpp(std::string optimize_V, NumericVector betahat
       
       Function negloglik_grad_logscale("negloglik.grad.logscale");
       
-      if(neg_loglik_logscale(Rcpp::_[lV]=lv,
-                             Rcpp::_[betahat]=betahat, 
-                             Rcpp::_[shat2]=shat2, 
-                             Rcpp::_[prior_weights]=prior_weights) >
-           neg_loglik_logscale(Rcpp::_[lV]=log(V), 
-                               Rcpp::_[betahat]=betahat, 
-                               Rcpp::_[shat2]=shat2, 
-                               Rcpp::_[prior_weights]=prior_weights)){
+      if(neg_loglik_logscale(lV,
+                             betahat, 
+                             shat2, 
+                             prior_weights) >
+           neg_loglik_logscale(log(V), 
+                               betahat, 
+                               shat2, 
+                               prior_weights)){
         lV = log(V);
       }
       V = exp(lV);
@@ -177,6 +178,14 @@ double optimize_prior_variance_cpp(std::string optimize_V, NumericVector betahat
   return V;
 }
 
+NumericVector rep(double value, int times) {
+  NumericVector result;
+  for (int i = 0; i < times; ++i) {
+    result.push_back(value);
+  }
+  return result;
+}
+
 
 // [[Rcpp::plugins(openmp)]]
 // [[Rcpp::plugins(cpp11)]]
@@ -187,20 +196,24 @@ List single_effect_regression_cpp(NumericVector y, NumericMatrix X, double V,
                                   String optimize_V = "none", double check_null_threshold = 0) {
   
   
-  NumericVector Xty = compute_Xty_cpp(X, y); // Placeholder for compute_Xty
+  NumericVector Xty = compute_Xty_cpp(X, y); 
   double d = X.attr("d");
   NumericVector betahat = (1 / d) * Xty;
   double shat2 = residual_variance / d;
   
   int ncolX = X.ncol();
+  NumericVector prior_weights_an;
   if (prior_weights.isNull()) {
-    prior_weights = rep(1.0 / ncolX, ncolX);
+    prior_weights_an = rep(1.0 / ncolX, ncolX);
+  } else {
+    prior_weights_an = as<NumericVector>(prior_weights);
   }
-  
+  double v_int=V;
   
   if (optimize_V != "EM" && optimize_V != "none") {
-    V = optimize_prior_variance_cpp(optimize_V, betahat, shat2, prior_weights, 
-                                    NumericVector(), NumericVector(), V, 
+    
+    V = optimize_prior_variance_cpp(optimize_V, betahat, shat2, prior_weights_an, 
+                                    NumericVector(), NumericVector(), v_int,
                                     check_null_threshold);
   }
   Function dnorm("dnorm");
@@ -223,11 +236,13 @@ List single_effect_regression_cpp(NumericVector y, NumericMatrix X, double V,
   NumericVector post_mean2 = post_var + pow(post_mean, 2);
   
   double lbf_model = maxlbf + log(weighted_sum_w);
-  double loglik = lbf_model + sum(dnorm(y, 0, sqrt(residual_variance), true));
+  NumericVector dno_var = dnorm(y, 0, sqrt(residual_variance), true);
+  double sum_dnorm = std::accumulate(dno_var.begin(), dno_var.end(), 0.0);
+  double loglik = lbf_model + sum_dnorm;
   
   if (optimize_V == "EM") {
-    V = optimize_prior_variance_cpp(optimize_V, betahat, shat2, prior_weights, 
-                                    alpha, post_mean2, check_null_threshold);
+    V = optimize_prior_variance_cpp(optimize_V, betahat, shat2, prior_weights_an, 
+                                    alpha, post_mean2, double(), check_null_threshold);
   }
   
   return List::create(Named("alpha") = alpha, Named("mu") = post_mean,
